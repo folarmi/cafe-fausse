@@ -1,14 +1,15 @@
-export type GalleryImage = {
-  src: string;
-  alt: string;
-};
+import type { GalleryImage } from "../utils/types";
+import interior from "../assets/gallery-cafe-interior.webp";
+import ribeye from "../assets/gallery-ribeye-steak.webp";
+import special from "../assets/gallery-special-event.webp";
+import home from "../assets/home-cafe-fausse.webp";
 
 export const galleryImages: GalleryImage[] = [
   {
-    src: "https://picsum.photos/id/1060/1200/800",
+    src: home,
     alt: "Dining room ambiance",
   },
-  { src: "https://picsum.photos/id/292/1200/800", alt: "Chef plating" },
-  { src: "https://picsum.photos/id/1080/1200/800", alt: "Signature dish" },
-  { src: "https://picsum.photos/id/1059/1200/800", alt: "Wine service" },
+  { src: ribeye, alt: "Chef plating" },
+  { src: special, alt: "Signature dish" },
+  { src: interior, alt: "Wine service" },
 ];

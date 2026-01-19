@@ -1,73 +1,155 @@
-# React + TypeScript + Vite
+# Café Fausse – Web Application & Interface Design
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Café Fausse is a full-stack restaurant web application developed as part of a Web Application and Interface Design project.  
+The system allows users to view restaurant information, sign up for a newsletter, and make table reservations backed by a PostgreSQL database.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Tech Stack
 
-## React Compiler
+### Frontend
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- React
+- TypeScript
+- Vite
+- Tailwind CSS
 
-## Expanding the ESLint configuration
+### Backend
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- Python (Flask)
+- PostgreSQL
+- psycopg2
+- Docker (for database setup)
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+---
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Core Features
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+- Restaurant menu and information pages
+- Newsletter signup
+- Reservation system with:
+  - Persistent customer storage
+  - Automatic table assignment
+  - Capacity enforcement per time slot
+- Server-side validation and error handling
+- PostgreSQL database integration
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+---
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Database Design (PostgreSQL)
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+### Customers Table
+
+| Field             | Description                                |
+| ----------------- | ------------------------------------------ |
+| customer_id       | Primary key                                |
+| customer_name     | Customer name                              |
+| customer_email    | Customer email (unique)                    |
+| phone_number      | Phone number                               |
+| newsletter_signup | Boolean indicating newsletter subscription |
+
+### Reservations Table
+
+| Field          | Description                         |
+| -------------- | ----------------------------------- |
+| reservation_id | Primary key                         |
+| customer_id    | Foreign key → customers.customer_id |
+| time_slot      | Reservation date and time           |
+| table_number   | Assigned table number (1–30)        |
+
+---
+
+## Business Logic (SRS-Compliant)
+
+- Customer information is inserted or updated in the **Customers** table.
+- When a reservation is created:
+  1. The selected time slot is checked.
+  2. A random available table (1–30) is assigned.
+  3. If all 30 tables are booked for that time slot, the request is rejected.
+- The user receives a confirmation message on success or is prompted to select another time if fully booked.
+
+---
+
+## Running the Application
+
+### 1. Start PostgreSQL (Docker)
+
+Using Docker Compose:
+
+```bash
+docker-compose up -d
+
+docker run --name cafe_fausse_db \
+  -e POSTGRES_DB=cafe_fausse \
+  -e POSTGRES_USER=cafe \
+  -e POSTGRES_PASSWORD=cafe_password \
+  -p 5432:5432 \
+  -d postgres:16
+
+2. Run the Backend (Flask)
+cd backend
+source .venv/bin/activate
+python3 app.py
+
+Backend runs on:
+
+http://127.0.0.1:5000
+
+Health check:
+
+GET /api/health
+
+3. Run the Frontend (React)
+npm install
+npm run dev
+
+API Endpoints
+Newsletter Signup
+POST /api/newsletter
+
+Request body:
+
+{
+  "email": "user@example.com"
+}
+
+Create Reservation
+POST /api/reservations
+
+
+Request body:
+
+{
+  "date": "YYYY-MM-DD",
+  "time": "7:00 PM",
+  "name": "Customer Name",
+  "email": "user@example.com",
+  "phone": "123456789"
+}
+
+Database Verification & Testing
+
+The reservation system was tested by submitting 31 reservation requests for the same time slot:
+
+The first 30 reservations were successfully created and assigned unique table numbers (1–30).
+
+The 31st reservation was rejected with a message instructing the user to select another time slot.
+
+Verification was performed directly in PostgreSQL using SQL queries to confirm:
+
+Data persistence
+
+Table capacity enforcement
+
+Proper customer–reservation relationships
+
+Notes
+
+PostgreSQL is used for persistent storage as required by the project specification.
+
+Docker simplifies database setup and execution.
+
+All validation logic is enforced server-side.
+
+The frontend communicates with the backend via RESTful APIs.
 ```

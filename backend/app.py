@@ -2,6 +2,8 @@ import os
 import re
 import random
 from datetime import datetime
+from typing import Optional
+
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -88,7 +90,7 @@ def parse_time_slot(date_str: str, time_label: str) -> datetime:
     dt_str = f"{date_str} {SLOT_TO_24H[time_label]}"
     return datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
 
-def upsert_customer(conn, name: str, email: str, phone: str | None, newsletter_signup: bool):
+def upsert_customer(conn, name: str, email: str, phone: Optional[str], newsletter_signup: bool):
     """
     Insert customer if new; if existing, update name/phone and keep newsletter true if ever true.
     Returns customer row (dict).
@@ -113,7 +115,7 @@ def upsert_customer(conn, name: str, email: str, phone: str | None, newsletter_s
             """, (name, phone, newsletter_signup, email))
             return cur.fetchone()
 
-def pick_random_available_table(conn, time_slot: datetime) -> int | None:
+def pick_random_available_table(conn, time_slot: datetime) -> Optional[int]:
     """
     Returns a random available table_number [1..30] for the time_slot.
     None if fully booked.

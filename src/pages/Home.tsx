@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState } from "react";
 import { SectionTitle } from "../components";
 import Container from "../components/Container";
@@ -6,6 +7,7 @@ import Button from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import Input from "../components/ui/Input";
 import type { Status } from "../utils/types";
+import { subscribeNewsletter } from "../lib/api";
 
 const Home = () => {
   return (
@@ -130,19 +132,31 @@ function Highlights() {
 function Newsletter() {
   const [status, setStatus] = useState<Status>(null);
   const [email, setEmail] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
     if (!email.trim()) {
       setStatus({ type: "error", msg: "Please enter an email address." });
       return;
     }
-    // backend later
-    setStatus({
-      type: "success",
-      msg: "You’re signed up (connect this to backend next).",
-    });
-    setEmail("");
+
+    try {
+      setLoading(true);
+      setStatus(null);
+
+      const res = await subscribeNewsletter(email);
+      setStatus({ type: "success", msg: res.message });
+      setEmail("");
+    } catch (err: any) {
+      setStatus({
+        type: "error",
+        msg: err?.message || "Something went wrong. Please try again.",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -172,7 +186,9 @@ function Newsletter() {
                 />
               </label>
 
-              <Button type="submit">Sign Up</Button>
+              <Button type="submit" isLoading={loading}>
+                Sign Up
+              </Button>
 
               {status ? <Alert type={status.type}>{status.msg}</Alert> : null}
             </form>

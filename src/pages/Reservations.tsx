@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useMemo, useState } from "react";
 import { SectionTitle } from "../components";
 import Container from "../components/Container";
@@ -8,6 +9,7 @@ import { todayISO, validate } from "../utils";
 import type { Errors, Form } from "../utils/types";
 import Button from "../components/ui/Button";
 import Alert from "../components/ui/Alert";
+import { createReservation } from "../lib/api";
 
 const Reservations = () => {
   const [form, setForm] = useState<Form>({
@@ -42,25 +44,38 @@ const Reservations = () => {
 
     const e2 = validate(form);
     setErrors(e2);
+
     if (Object.keys(e2).length > 0) {
       setStatus({ type: "error", msg: "Please fix the highlighted fields." });
       return;
     }
 
-    setLoading(true);
-    setStatus(null);
+    try {
+      setLoading(true);
+      setStatus(null);
 
-    // Fake submit (backend later)
-    await new Promise((r) => setTimeout(r, 700));
+      const res = await createReservation({
+        date: form.date,
+        time: form.time,
+        guests: form.guests,
+        name: form.name,
+        email: form.email,
+        phone: form.phone || undefined,
+      });
 
-    setLoading(false);
-    setStatus({
-      type: "success",
-      msg: "Reservation received. We’ll confirm availability shortly.",
-    });
+      setStatus({ type: "success", msg: res.message });
+      setForm((p) => ({ ...p, time: "" }));
+    } catch (err: any) {
+      // backend can return field errors
+      if (err?.errors) setErrors((prev: any) => ({ ...prev, ...err.errors }));
 
-    // Optional: reset some fields
-    setForm((p) => ({ ...p, time: "" }));
+      setStatus({
+        type: "error",
+        msg: err?.message || "Reservation failed. Please try again.",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

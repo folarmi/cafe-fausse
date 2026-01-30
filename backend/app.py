@@ -1,16 +1,15 @@
+# backend/app.py
 import os
 import re
 import random
 from datetime import datetime
 from typing import Optional
 
-
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
-import psycopg2
-import psycopg2.extras
-from psycopg2.errors import UniqueViolation
+import psycopg
+from psycopg.rows import dict_row
 
 from dotenv import load_dotenv
 
@@ -33,18 +32,22 @@ SLOT_TO_24H = {
 
 DATABASE_URL = os.getenv(
     "DATABASE_URL",
-    "postgresql://cafe:cafe_password@localhost:5432/cafe_fausse"
+    "postgresql://cafe:cafe_password@localhost:5432/cafe_fausse",
 )
 
+
 def get_conn():
-    return psycopg2.connect(DATABASE_URL)
+    # dict_row makes fetchone()/fetchall() return dict-like rows
+    return psycopg.connect(DATABASE_URL, row_factory=dict_row)
+
 
 def init_db():
-    conn = get_conn()
-    try:
+    # psycopg v3 will auto-commit on successful context exit
+    with get_conn() as conn:
         with conn.cursor() as cur:
             # Customers table (as specified)
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS customers (
                     customer_id SERIAL PRIMARY KEY,
                     customer_name TEXT NOT NULL,
@@ -52,29 +55,33 @@ def init_db():
                     phone_number TEXT,
                     newsletter_signup BOOLEAN NOT NULL DEFAULT FALSE
                 );
-            """)
+                """
+            )
 
             # Reservations table (as specified)
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE TABLE IF NOT EXISTS reservations (
                     reservation_id SERIAL PRIMARY KEY,
                     customer_id INT NOT NULL REFERENCES customers(customer_id) ON DELETE CASCADE,
                     time_slot TIMESTAMPTZ NOT NULL,
                     table_number INT NOT NULL CHECK (table_number >= 1 AND table_number <= 30)
                 );
-            """)
+                """
+            )
 
             # Prevent double-booking the same table for the same time_slot
-            cur.execute("""
+            cur.execute(
+                """
                 CREATE UNIQUE INDEX IF NOT EXISTS uniq_slot_table
                 ON reservations(time_slot, table_number);
-            """)
+                """
+            )
 
-        conn.commit()
-    finally:
-        conn.close()
 
+# Initialize DB on startup
 init_db()
+
 
 def parse_time_slot(date_str: str, time_label: str) -> datetime:
     """
@@ -86,34 +93,38 @@ def parse_time_slot(date_str: str, time_label: str) -> datetime:
     if time_label not in SLOT_TO_24H:
         raise ValueError("Invalid time slot")
 
-    # e.g. "2026-01-18 17:00"
+    # e.g. "2026-01-20 19:00"
     dt_str = f"{date_str} {SLOT_TO_24H[time_label]}"
     return datetime.strptime(dt_str, "%Y-%m-%d %H:%M")
 
-def upsert_customer(conn, name: str, email: str, phone: Optional[str], newsletter_signup: bool):
+
+def upsert_customer(
+    conn,
+    name: str,
+    email: str,
+    phone: Optional[str],
+    newsletter_signup: bool,
+):
     """
     Insert customer if new; if existing, update name/phone and keep newsletter true if ever true.
     Returns customer row (dict).
     """
-    with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-        try:
-            cur.execute("""
-                INSERT INTO customers (customer_name, customer_email, phone_number, newsletter_signup)
-                VALUES (%s, %s, %s, %s)
-                RETURNING customer_id, customer_name, customer_email, phone_number, newsletter_signup;
-            """, (name, email, phone, newsletter_signup))
-            return cur.fetchone()
-        except UniqueViolation:
-            conn.rollback()
-            cur.execute("""
-                UPDATE customers
-                SET customer_name = %s,
-                    phone_number = %s,
-                    newsletter_signup = (newsletter_signup OR %s)
-                WHERE customer_email = %s
-                RETURNING customer_id, customer_name, customer_email, phone_number, newsletter_signup;
-            """, (name, phone, newsletter_signup, email))
-            return cur.fetchone()
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            INSERT INTO customers (customer_name, customer_email, phone_number, newsletter_signup)
+            VALUES (%s, %s, %s, %s)
+            ON CONFLICT (customer_email)
+            DO UPDATE SET
+                customer_name = EXCLUDED.customer_name,
+                phone_number = EXCLUDED.phone_number,
+                newsletter_signup = (customers.newsletter_signup OR EXCLUDED.newsletter_signup)
+            RETURNING customer_id, customer_name, customer_email, phone_number, newsletter_signup;
+            """,
+            (name, email, phone, newsletter_signup),
+        )
+        return cur.fetchone()
+
 
 def pick_random_available_table(conn, time_slot: datetime) -> Optional[int]:
     """
@@ -121,17 +132,23 @@ def pick_random_available_table(conn, time_slot: datetime) -> Optional[int]:
     None if fully booked.
     """
     with conn.cursor() as cur:
-        cur.execute("SELECT table_number FROM reservations WHERE time_slot = %s;", (time_slot,))
-        taken = {row[0] for row in cur.fetchall()}
+        cur.execute(
+            "SELECT table_number FROM reservations WHERE time_slot = %s;",
+            (time_slot,),
+        )
+        taken = {row["table_number"] for row in cur.fetchall()}
 
     available = [t for t in range(1, TOTAL_TABLES + 1) if t not in taken]
     if not available:
         return None
+
     return random.choice(available)
+
 
 @app.get("/api/health")
 def health():
     return jsonify({"ok": True, "service": "cafe-fausse-api", "db": "postgres"})
+
 
 @app.post("/api/newsletter")
 def newsletter():
@@ -149,14 +166,11 @@ def newsletter():
     if not EMAIL_RE.match(email):
         return jsonify({"ok": False, "message": "Please enter a valid email."}), 400
 
-    conn = get_conn()
-    try:
-        conn.autocommit = False
+    with get_conn() as conn:
         upsert_customer(conn, name=name, email=email, phone=phone, newsletter_signup=True)
-        conn.commit()
-        return jsonify({"ok": True, "message": "Subscribed successfully."}), 201
-    finally:
-        conn.close()
+
+    return jsonify({"ok": True, "message": "Subscribed successfully."}), 201
+
 
 @app.post("/api/reservations")
 def create_reservation():
@@ -167,8 +181,8 @@ def create_reservation():
     data = request.get_json(silent=True) or {}
     errors = {}
 
-    date_str = (data.get("date") or "").strip()        # YYYY-MM-DD
-    time_label = (data.get("time") or "").strip()      # "5:00 PM"
+    date_str = (data.get("date") or "").strip()  # YYYY-MM-DD
+    time_label = (data.get("time") or "").strip()  # "7:00 PM"
     name = (data.get("name") or "").strip()
     email = (data.get("email") or "").strip().lower()
     phone = (data.get("phone") or "").strip() or None
@@ -201,65 +215,89 @@ def create_reservation():
     try:
         time_slot = parse_time_slot(date_str, time_label)
     except ValueError:
-        return jsonify({"ok": False, "message": "Invalid time slot.", "errors": {"time": "Invalid time slot."}}), 400
+        return (
+            jsonify(
+                {
+                    "ok": False,
+                    "message": "Invalid time slot.",
+                    "errors": {"time": "Invalid time slot."},
+                }
+            ),
+            400,
+        )
 
-    conn = get_conn()
-    try:
-        conn.autocommit = False
-
+    with get_conn() as conn:
         # 1) Add/update customer row
-        customer = upsert_customer(conn, name=name, email=email, phone=phone, newsletter_signup=False)
+        customer = upsert_customer(
+            conn, name=name, email=email, phone=phone, newsletter_signup=False
+        )
 
         # 2) Assign random available table for that time_slot
         table_number = pick_random_available_table(conn, time_slot=time_slot)
         if table_number is None:
-            conn.rollback()
-            return jsonify({
-                "ok": False,
-                "message": "All tables are taken for that time slot. Please pick another time.",
-                "errors": {"time": "Fully booked."}
-            }), 409
+            return (
+                jsonify(
+                    {
+                        "ok": False,
+                        "message": "All tables are taken for that time slot. Please pick another time.",
+                        "errors": {"time": "Fully booked."},
+                    }
+                ),
+                409,
+            )
 
-        # 3) Insert reservation
-        with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
-            # Try insert. If a race happens (two people get same random table), retry once.
-            try:
-                cur.execute("""
+        # 3) Insert reservation (retry on rare race condition)
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
                     INSERT INTO reservations (customer_id, time_slot, table_number)
                     VALUES (%s, %s, %s)
                     RETURNING reservation_id, customer_id, time_slot, table_number;
-                """, (customer["customer_id"], time_slot, table_number))
+                    """,
+                    (customer["customer_id"], time_slot, table_number),
+                )
                 reservation = cur.fetchone()
-                conn.commit()
-            except UniqueViolation:
-                conn.rollback()
 
-                table_number_retry = pick_random_available_table(conn, time_slot=time_slot)
-                if table_number_retry is None:
-                    return jsonify({
-                        "ok": False,
-                        "message": "All tables are taken for that time slot. Please pick another time.",
-                        "errors": {"time": "Fully booked."}
-                    }), 409
+        except psycopg.errors.UniqueViolation:
+            # Another request took that table number; try once more
+            table_number_retry = pick_random_available_table(conn, time_slot=time_slot)
+            if table_number_retry is None:
+                return (
+                    jsonify(
+                        {
+                            "ok": False,
+                            "message": "All tables are taken for that time slot. Please pick another time.",
+                            "errors": {"time": "Fully booked."},
+                        }
+                    ),
+                    409,
+                )
 
-                with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur2:
-                    cur2.execute("""
-                        INSERT INTO reservations (customer_id, time_slot, table_number)
-                        VALUES (%s, %s, %s)
-                        RETURNING reservation_id, customer_id, time_slot, table_number;
-                    """, (customer["customer_id"], time_slot, table_number_retry))
-                    reservation = cur2.fetchone()
-                    conn.commit()
+            with conn.cursor() as cur2:
+                cur2.execute(
+                    """
+                    INSERT INTO reservations (customer_id, time_slot, table_number)
+                    VALUES (%s, %s, %s)
+                    RETURNING reservation_id, customer_id, time_slot, table_number;
+                    """,
+                    (customer["customer_id"], time_slot, table_number_retry),
+                )
+                reservation = cur2.fetchone()
 
         # 4) Confirm successful reservation (include table number)
-        return jsonify({
-            "ok": True,
-            "message": f"Reservation successful. Your table number is {reservation['table_number']}.",
-            "reservation": reservation
-        }), 201
+        return (
+            jsonify(
+                {
+                    "ok": True,
+                    "message": f"Reservation successful. Your table number is {reservation['table_number']}.",
+                    "reservation": reservation,
+                }
+            ),
+            201,
+        )
 
-    finally:
-        conn.close()
 
 if __name__ == "__main__":
+    # Local dev only; Render will still run `python app.py` unless you switch to gunicorn
     app.run(host="127.0.0.1", port=5000, debug=True)

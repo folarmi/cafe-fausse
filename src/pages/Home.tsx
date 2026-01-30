@@ -70,15 +70,16 @@ function Hero() {
 
           <div className="relative">
             <div className="overflow-hidden rounded-3xl border border-neutral-200 bg-neutral-100">
-              <div className="aspect-4/3 w-full" />
-
-              <div className="absolute inset-0">
+              {/* Aspect ratio container */}
+              <div className="relative aspect-4/3 w-full">
                 <img
                   src={heroImage}
                   alt=""
-                  className="h-full w-full object-cover"
+                  className="absolute inset-0 h-full w-full object-cover"
                 />
-                <div className="absolute inset-0 bg-black/40" />{" "}
+
+                {/* Overlay */}
+                <div className="absolute inset-0 bg-black/40" />
               </div>
             </div>
 

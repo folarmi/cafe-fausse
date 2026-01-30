@@ -8,6 +8,7 @@ import { Card } from "../components/ui/Card";
 import Input from "../components/ui/Input";
 import type { Status } from "../utils/types";
 import { subscribeNewsletter } from "../lib/api";
+import heroImage from "../assets/heroImage.png";
 
 const Home = () => {
   return (
@@ -69,9 +70,15 @@ function Hero() {
 
           <div className="relative">
             <div className="overflow-hidden rounded-3xl border border-neutral-200 bg-neutral-100">
-              <div className="aspect-[4/3] w-full" />
-              <div className="absolute inset-0 grid place-items-center text-sm text-neutral-500">
-                Hero image placeholder
+              <div className="aspect-4/3 w-full" />
+
+              <div className="absolute inset-0">
+                <img
+                  src={heroImage}
+                  alt=""
+                  className="h-full w-full object-cover"
+                />
+                <div className="absolute inset-0 bg-black/40" />{" "}
               </div>
             </div>
 

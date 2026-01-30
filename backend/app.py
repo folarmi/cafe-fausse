@@ -299,5 +299,7 @@ def create_reservation():
 
 
 if __name__ == "__main__":
-    # Local dev only; Render will still run `python app.py` unless you switch to gunicorn
-    app.run(host="127.0.0.1", port=5000, debug=True)
+    port = int(os.getenv("PORT", "5000"))
+    # On Render you must bind to 0.0.0.0
+    app.run(host="0.0.0.0", port=port, debug=False)
+

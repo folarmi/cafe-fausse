@@ -1,4 +1,14 @@
+import "yet-another-react-lightbox/styles.css";
+import "yet-another-react-lightbox/plugins/captions.css";
+
 import Lightbox, { type Slide } from "yet-another-react-lightbox";
+import Captions from "yet-another-react-lightbox/plugins/captions";
+import Counter from "yet-another-react-lightbox/plugins/counter";
+import Fullscreen from "yet-another-react-lightbox/plugins/fullscreen";
+import Thumbnails from "yet-another-react-lightbox/plugins/thumbnails";
+import Zoom from "yet-another-react-lightbox/plugins/zoom";
+import "yet-another-react-lightbox/plugins/thumbnails.css";
+
 import { SectionTitle } from "../components";
 import Container from "../components/Container";
 import { galleryImages } from "../data/gallery";
@@ -10,9 +20,16 @@ const Gallery = () => {
   const [index, setIndex] = useState(0);
 
   const slides: Slide[] = useMemo(
-    () => galleryImages.map((img) => ({ src: img.src, alt: img.alt })),
+    () =>
+      galleryImages.map((img) => ({
+        src: img.src,
+        alt: img.alt,
+        // captions plugin uses "title" / "description"
+        title: img.alt,
+      })),
     [],
   );
+
   return (
     <Container className="py-10 sm:py-12">
       <SectionTitle
@@ -40,7 +57,7 @@ const Gallery = () => {
                   className="h-44 w-full object-cover transition group-hover:scale-105"
                   loading="lazy"
                 />
-                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/35 via-transparent to-transparent opacity-0 transition group-hover:opacity-100" />
+                <div className="pointer-events-none absolute inset-0 bg-linear-to-t from-black/35 via-transparent to-transparent opacity-0 transition group-hover:opacity-100" />
               </button>
             ))}
           </div>
@@ -50,6 +67,14 @@ const Gallery = () => {
             close={() => setOpen(false)}
             index={index}
             slides={slides}
+            // keeps index in sync when user navigates
+            on={{
+              view: ({ index: currentIndex }) => setIndex(currentIndex),
+            }}
+            plugins={[Captions, Counter, Fullscreen, Thumbnails, Zoom]}
+            captions={{ showToggle: true, descriptionTextAlign: "center" }}
+            carousel={{ finite: false }}
+            controller={{ closeOnBackdropClick: true }}
           />
         </div>
 
@@ -63,7 +88,7 @@ const Gallery = () => {
             </ul>
           </Card>
 
-          <Card className="p-6 bg-neutral-50">
+          <Card className="bg-neutral-50 p-6">
             <p className="font-serif text-xl">Guest Reviews</p>
             <div className="mt-3 space-y-3 text-sm text-neutral-700">
               <p className="rounded-2xl border border-neutral-200 bg-white p-4">
